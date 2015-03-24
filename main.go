@@ -39,6 +39,7 @@ type SuperAgent struct {
 	TargetType string
 	ForceType  string
 	Data       map[string]interface{}
+	StringData string
 	FormData   url.Values
 	QueryData  url.Values
 	Client     *http.Client
@@ -377,7 +378,11 @@ func (s *SuperAgent) SendString(content string) *SuperAgent {
 		for k, v := range val {
 			s.Data[k] = v
 		}
-	} else if formVal, err := url.ParseQuery(content); err == nil {
+	} else if s.TargetType == "form" {
+		formVal, err := url.ParseQuery(content)
+		if err != nil {
+			s.Errors = append(s.Errors, err)
+		}
 		for k, _ := range formVal {
 			// make it array if already have key
 			if val, ok := s.Data[k]; ok {
@@ -396,9 +401,10 @@ func (s *SuperAgent) SendString(content string) *SuperAgent {
 				s.Data[k] = formVal.Get(k)
 			}
 		}
-		s.TargetType = "form"
 	} else {
 		// need to add text mode or other format body request to this func
+		s.StringData = content
+		s.TargetType = "text"
 	}
 	return s
 }
@@ -452,7 +458,7 @@ func (s *SuperAgent) End(callback ...func(response Response, body string, errs [
 	}
 	// check if there is forced type
 	switch s.ForceType {
-	case "json", "form":
+	case "json", "form", "text":
 		s.TargetType = s.ForceType
 	}
 
@@ -467,7 +473,11 @@ func (s *SuperAgent) End(callback ...func(response Response, body string, errs [
 			formData := changeMapToURLValues(s.Data)
 			req, err = http.NewRequest(s.Method, s.Url, strings.NewReader(formData.Encode()))
 			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		} else if s.TargetType == "text" {
+			b := bytes.NewBufferString(s.StringData)
+			req, err = http.NewRequest(s.Method, s.Url, b)
 		}
+
 	case GET, HEAD, DELETE:
 		req, err = http.NewRequest(s.Method, s.Url, nil)
 	}
